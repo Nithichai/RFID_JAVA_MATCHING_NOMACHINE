@@ -5,5 +5,4 @@ public class Rfid {
 	public void getReadData(String data, int antNo) {
 		this.tag = data;
 	}
-
 }

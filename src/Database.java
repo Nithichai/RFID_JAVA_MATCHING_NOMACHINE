@@ -7,14 +7,23 @@ import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.URL;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 
 public class Database {
 	
+	private JSONArray userEventJSON;
+	private int colLength = 2;
+	
+	public Database() {
+		userEventJSON = new JSONArray();
+		getRunnerList();
+	}
+	
 	public void getRunnerList() {
-		String ip = "http://localhost:7777";
+		String ip = "http://192.168.86.128:7777/name/select";
 		URL url;
 		try {
 			url = new URL(ip);
@@ -27,16 +36,19 @@ public class Database {
 				response.append(inputLine);
 			rd.close();
 			con.disconnect();
+			userEventJSON = new JSONArray(response.toString());
 		} catch (MalformedURLException e) {
-			e.printStackTrace();
+//			e.printStackTrace();
 		} catch (IOException e) {
-			e.printStackTrace();
+//			e.printStackTrace();
+		} catch (JSONException e) {
+//			e.printStackTrace();
 		}
 	}
 	
 	public void addTagToDatabase(String id, String tag) {
-		JSONObject jo = new JSONObject();
 		try {
+			JSONObject jo = new JSONObject();
 			jo.put(id, tag);
 			String ip = "http://localhost:7777";
 			URL url = new URL(ip);
@@ -65,6 +77,26 @@ public class Database {
 		} catch (IOException e) {
 //			e.printStackTrace();
 		}
+	}
+	
+	public String[][] getTable() {
+		String[][] table = null;
+		try {
+			if (userEventJSON.length() > 0) {
+				table = new String[userEventJSON.length()][colLength];
+				for (int i = 0; i < table.length; i++) {
+					JSONObject obj = new JSONObject(userEventJSON.get(i).toString());
+					String[] indexList = {"user_event_id", "user_name"};
+					for (int j = 0; j < indexList.length; j++) {
+						table[i][j] = obj.get(indexList[j]).toString();
+					}
+				}
+			} else
+				table = new String[1][colLength];
+		} catch (JSONException e) {
+			e.printStackTrace();
+		}
+		return table;
 	}
 	
 }
