@@ -11,11 +11,16 @@ import javax.swing.JButton;
 import javax.swing.JTextField;
 import javax.swing.JComboBox;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.awt.event.WindowAdapter;
+import java.util.ArrayList;
+import java.util.Random;
 import java.awt.event.ActionEvent;
 import javax.swing.JToggleButton;
+import javax.swing.ListSelectionModel;
 
-public class FrameGui extends Thread{
+public class FrameGui extends Thread {
 
 	private JFrame frame;
 	private JTable runnerTable;
@@ -32,16 +37,21 @@ public class FrameGui extends Thread{
 	private JButton setButton;
 	private JLabel tagLabel;
 	private JLabel tagSetLabel;
+	private JLabel searchLabel;
+	private JButton searchButton;
+	private JButton refreshButton;
 	
-	private String[] tableHeader = {"user_event_id", "user_name"};
-	private String[][] tableData = null;
+	public static String[] tableHeader = {"user_event_id", "user_name", "running_no"};
+	private  String[][] tableData = new String[0][tableHeader.length];
+	private String[] antennaSet = {"Antenna1", "Antenna2", "Antenna3", "Antenna4"};
 	
 	private Database db;
-	
+	private Rfid rfid;
+	private JTextField nameTextField;
+	private String[] selectionRow;
 
 	public static void main(String[] args) {
 		FrameGui frame = new FrameGui();
-		frame.frame.setVisible(true);
 		frame.start();
 	}
 	
@@ -59,6 +69,9 @@ public class FrameGui extends Thread{
 	public FrameGui() {
 		initialize();
 		db = new Database();
+		db.getRunnerList();
+		tableData = db.getTable();
+		rfid = new Rfid();
 	}
 
 	private void initialize() {
@@ -78,18 +91,46 @@ public class FrameGui extends Thread{
 		        }
 		    }
 		});
+		
 		runnerScrollPane = new JScrollPane();
 		runnerScrollPane.setBounds(0, 0, 563, 565);
 		frame.getContentPane().add(runnerScrollPane);
 		
-		
-		runnerTable = new JTable(tableData, tableHeader);
+		runnerTable = new JTable();
+		runnerTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		runnerTable.setModel(new DefaultTableModel(tableData, tableHeader) {
 			private static final long serialVersionUID = -9098365186691267440L;
 			public boolean isCellEditable(int row, int column){
 				return false;
 			}
 		});
+		runnerTable.addMouseListener(new MouseListener() {
+			@Override
+			public void mouseClicked(MouseEvent arg0) {}
+			@Override
+			public void mouseEntered(MouseEvent e) {}
+			@Override
+			public void mouseExited(MouseEvent e) {}
+			@Override
+			public void mousePressed(MouseEvent e) {
+				int[] colSelects = runnerTable.getSelectedRows();
+				if (colSelects.length > 0) {
+					int colSelect = colSelects[0];
+					selectionRow = tableData[colSelect];
+					nameTextField.setText(selectionRow[1]);
+				}
+			}
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				int[] colSelects = runnerTable.getSelectedRows();
+				if (colSelects.length > 0) {
+					int colSelect = colSelects[0];
+					selectionRow = tableData[colSelect];
+					nameTextField.setText(selectionRow[1]);
+				}
+			}
+		});
+		runnerTable.getSelectedRows();
 		runnerScrollPane.setViewportView(runnerTable);
 		
 		tagSetLabel = new JLabel("Tag ID");
@@ -98,8 +139,8 @@ public class FrameGui extends Thread{
 		tagSetLabel.setBounds(653, 173, 50, 20);
 		frame.getContentPane().add(tagSetLabel);
 		
-		tagLabel = new JLabel("ABCABCABCABCABCABCABCABCABCABC");
-		tagLabel.setFont(new Font("Tahoma", Font.PLAIN, 10));
+		tagLabel = new JLabel();
+		tagLabel.setFont(new Font("Tahoma", Font.PLAIN, 11));
 		tagLabel.setHorizontalAlignment(SwingConstants.CENTER);
 		tagLabel.setBounds(575, 201, 207, 16);
 		frame.getContentPane().add(tagLabel);
@@ -107,12 +148,29 @@ public class FrameGui extends Thread{
 		setButton = new JButton("Set");
 		setButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
-				int reply = JOptionPane.showConfirmDialog(frame, 
-		            "Are you sure to set tag to runner ?", "Really Set Tag?", 
-		            JOptionPane.YES_NO_OPTION);
-		        if (reply == JOptionPane.YES_OPTION){
-		        	System.out.println("Set");
-		        }
+				String name = nameTextField.getText().trim();
+				if (name.length() >= 1 && db.datainJSON(name)) {
+					// Make Tag
+					Random random = new Random();
+		        	String data = "";
+		        	for (int i = 0; i < 30; i++) {
+		        		data += String.valueOf(random.nextInt(10));
+		        	}
+					rfid.getReadData(data, antennaComboBox.getSelectedIndex());
+					
+					int reply = JOptionPane.showConfirmDialog(frame, 
+			            "Are you sure to set tag to runner ?", "Really Set Tag?", 
+			            JOptionPane.YES_NO_OPTION);
+			        if (reply == JOptionPane.YES_OPTION){
+			        	System.out.println("Set");
+			        	db.addTagToDatabase(selectionRow[0], selectionRow[2], rfid.tag);
+			        	db.getRunnerList();
+			        	tableData = db.getTable();
+			        }
+				} else {
+					JOptionPane.showMessageDialog(frame, "Please insert data in message box");
+				}
+				
 			}
 		});
 		setButton.setBounds(575, 230, 103, 25);
@@ -123,6 +181,7 @@ public class FrameGui extends Thread{
 		cancelButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent arg0) {
 				System.out.println("Cancel");
+				rfid.getReadData("", antennaComboBox.getSelectedIndex());
 			}
 		});
 		frame.getContentPane().add(cancelButton);
@@ -153,11 +212,19 @@ public class FrameGui extends Thread{
 				if (connectButton.isSelected()) {
 					System.out.println("Connect");
 					connectButton.setText("Disconnect");
+					antennaComboBox.setEnabled(true);
+					startButton.setEnabled(true);
 				} else {
 					System.out.println("DisConnect");
 					connectButton.setText("Connect");
+					antennaComboBox.setEnabled(false);
+					startButton.setEnabled(false);
+					setButton.setEnabled(false);
+					cancelButton.setEnabled(false);
+					nameTextField.setEnabled(false);
+					searchButton.setEnabled(false);
+					refreshButton.setEnabled(false);
 				}
-					
 			}
 		});
 		connectButton.setBounds(575, 73, 207, 25);
@@ -167,8 +234,9 @@ public class FrameGui extends Thread{
 		antennaButton.setBounds(575, 106, 56, 16);
 		frame.getContentPane().add(antennaButton);
 		
-		antennaComboBox = new JComboBox();
+		antennaComboBox = new JComboBox(antennaSet);
 		antennaComboBox.setBounds(635, 106, 147, 22);
+		antennaComboBox.setSelectedIndex(0);
 		frame.getContentPane().add(antennaComboBox);
 		
 		startButton = new JToggleButton("Start");
@@ -178,25 +246,86 @@ public class FrameGui extends Thread{
 				if (startButton.isSelected()) {
 					System.out.println("Start");
 					startButton.setText("Stop");
+					setButton.setEnabled(true);
+					cancelButton.setEnabled(true);
+					nameTextField.setEnabled(true);
+					searchButton.setEnabled(true);
+					refreshButton.setEnabled(true);
 				} else {
 					System.out.println("Stop");
 					startButton.setText("Start");
+					setButton.setEnabled(false);
+					cancelButton.setEnabled(false);
+					nameTextField.setEnabled(false);
+					searchButton.setEnabled(false);
+					refreshButton.setEnabled(false);
 				}
-					
 			}
 		});
 		frame.getContentPane().add(startButton);
+		
+		searchLabel = new JLabel("Name");
+		searchLabel.setHorizontalAlignment(SwingConstants.CENTER);
+		searchLabel.setBounds(575, 268, 43, 16);
+		frame.getContentPane().add(searchLabel);
+		
+		nameTextField = new JTextField();
+		nameTextField.setBounds(621, 265, 161, 22);
+		frame.getContentPane().add(nameTextField);
+		nameTextField.setColumns(10);
+		
+		searchButton = new JButton("Search");
+		searchButton.setBounds(575, 295, 207, 25);
+		searchButton.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				ArrayList<String[]> list = new ArrayList<String[]> ();
+				tableData = db.getTable();
+				for (int i = 0; i < tableData.length; i++) {
+					String[] datas = new String[tableHeader.length];
+					System.arraycopy(tableData[i], 0, datas, 0, tableHeader.length);
+					if (datas[1].equals(nameTextField.getText().trim()))
+						list.add(datas);
+				}
+				String[][] datas = new String[list.size()][tableHeader.length];
+				for (int i = 0; i < datas.length; i++) {
+					datas[i] = list.get(i);
+				}
+				if (datas.length > 0)
+					tableData = datas;
+				else
+					tableData = db.getTable();
+			}
+		});
+		frame.getContentPane().add(searchButton);
+		
+		refreshButton = new JButton("Refresh");
+		refreshButton.setBounds(575, 328, 207, 25);
+		refreshButton.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				db.getRunnerList();
+				tableData = db.getTable();
+			}
+		});
+		frame.getContentPane().add(refreshButton);
+		
+		frame.setVisible(true);
+		antennaComboBox.setEnabled(false);
+		startButton.setEnabled(false);
+		setButton.setEnabled(false);
+		cancelButton.setEnabled(false);
+		nameTextField.setEnabled(false);
+		searchButton.setEnabled(false);
+		refreshButton.setEnabled(false);
 	}
 	
 	private void update() {
-		tableData = db.getTable();
-		DefaultTableModel model = (DefaultTableModel)runnerTable.getModel();
+		DefaultTableModel model = (DefaultTableModel) runnerTable.getModel();
 		model.setNumRows(tableData.length);
 		for (int i = 0; i < tableData.length; i++) {
 			for (int j = 0; j < tableData[i].length; j++) {
 				model.setValueAt(tableData[i][j], i, j);
 			}
 		}
+		tagLabel.setText(rfid.tag);
 	}
-	
 }
