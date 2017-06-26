@@ -16,7 +16,7 @@ public class Database {
 	
 	private JSONArray userEventJSON;
 	private int colLength = FrameGui.tableHeader.length;
-	private String mainIP = "http://192.168.43.129:7777";
+	private String mainIP = "http://192.168.1.198:7777";
 	
 	public Database() {
 		userEventJSON = new JSONArray();
